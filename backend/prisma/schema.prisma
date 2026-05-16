@@ -1,0 +1,121 @@
+// prisma/schema.prisma
+// Complete relational database design for AI Workflow Automation
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+// ──────────────────────────────────────────
+// USER
+// ──────────────────────────────────────────
+model User {
+  id        String     @id @default(cuid())
+  email     String     @unique
+  password  String
+  createdAt DateTime   @default(now()) @map("created_at")
+
+  workflows Workflow[]
+
+  @@map("users")
+}
+
+// ──────────────────────────────────────────
+// WORKFLOW
+// ──────────────────────────────────────────
+model Workflow {
+  id          String         @id @default(cuid())
+  userId      String         @map("user_id")
+  name        String
+  triggerType String         @map("trigger_type")
+  isActive    Boolean        @default(true) @map("is_active")
+  createdAt   DateTime       @default(now()) @map("created_at")
+  updatedAt   DateTime       @updatedAt @map("updated_at")
+
+  user        User           @relation(fields: [userId], references: [id], onDelete: Cascade)
+  steps       WorkflowStep[]
+  executions  Execution[]
+
+  @@index([userId])
+  @@index([triggerType])
+  @@map("workflows")
+}
+
+// ──────────────────────────────────────────
+// WORKFLOW STEP
+// ──────────────────────────────────────────
+model WorkflowStep {
+  id         String   @id @default(cuid())
+  workflowId String   @map("workflow_id")
+  stepOrder  Int      @map("step_order")
+  actionType String   @map("action_type")  // email | webhook | delay
+  config     Json
+
+  workflow   Workflow @relation(fields: [workflowId], references: [id], onDelete: Cascade)
+
+  @@index([workflowId])
+  @@map("workflow_steps")
+}
+
+// ──────────────────────────────────────────
+// EVENT  (incoming trigger events)
+// ──────────────────────────────────────────
+model Event {
+  id        String   @id @default(cuid())
+  type      String
+  payload   Json
+  createdAt DateTime @default(now()) @map("created_at")
+
+  @@index([type])
+  @@map("events")
+}
+
+// ──────────────────────────────────────────
+// EXECUTION
+// ──────────────────────────────────────────
+model Execution {
+  id         String          @id @default(cuid())
+  workflowId String          @map("workflow_id")
+  eventId    String?         @map("event_id")
+  status     ExecutionStatus @default(PENDING)
+  startedAt  DateTime        @default(now()) @map("started_at")
+  finishedAt DateTime?       @map("finished_at")
+
+  workflow   Workflow        @relation(fields: [workflowId], references: [id], onDelete: Cascade)
+  logs       ExecutionLog[]
+
+  @@index([workflowId])
+  @@index([status])
+  @@map("executions")
+}
+
+// ──────────────────────────────────────────
+// EXECUTION LOG
+// ──────────────────────────────────────────
+model ExecutionLog {
+  id          String    @id @default(cuid())
+  executionId String    @map("execution_id")
+  stepOrder   Int?      @map("step_order")
+  message     String
+  status      String    // success | failed | info
+  timestamp   DateTime  @default(now())
+
+  execution   Execution @relation(fields: [executionId], references: [id], onDelete: Cascade)
+
+  @@index([executionId])
+  @@map("execution_logs")
+}
+
+// ──────────────────────────────────────────
+// ENUMS
+// ──────────────────────────────────────────
+enum ExecutionStatus {
+  PENDING
+  RUNNING
+  SUCCESS
+  FAILED
+}
